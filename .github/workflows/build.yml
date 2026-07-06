@@ -18,6 +18,9 @@ jobs:
           flutter-version: '3.24.0'
           channel: 'stable'
 
+      - name: Generate platform files
+        run: flutter create --org com.yemenerp --project-name yemen_erp_ultra .
+
       - name: Install dependencies
         run: flutter pub get
 
