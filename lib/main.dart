@@ -46,11 +46,7 @@ class YemenERPApp extends StatelessWidget {
               Locale('ar', 'YE'),
               Locale('en', 'US'),
             ],
-            localizationsDelegates: const [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-              DefaultCupertinoLocalizations.delegate,
-            ],
+            
             home: const SplashScreen(),
             routes: {
               '/login': (context) => const LoginScreen(),
