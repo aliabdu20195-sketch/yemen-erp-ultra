@@ -1,3 +1,4 @@
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -46,9 +47,11 @@ class YemenERPApp extends StatelessWidget {
               Locale('ar', 'YE'),
               Locale('en', 'US'),
             ],
-            
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
             home: const SplashScreen(),
-            routes: {
               '/login': (context) => const LoginScreen(),
               '/dashboard': (context) => const DashboardScreen(),
             },
