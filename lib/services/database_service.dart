@@ -99,6 +99,37 @@ class DatabaseService {
     });
     await db.insert('units', {'name': 'Piece', 'symbol': 'pcs'});
     await db.insert('categories', {'name': 'General'});
+await db.insert('categories', {'name': 'Electronics'});
+    await db.insert('products', {
+      'code': 'P001',
+      'name': 'Dell Laptop',
+      'category_id': 1,
+      'unit_id': 1,
+      'buy_price': 250000,
+      'sell_price': 320000,
+      'wholesale_price': 300000,
+    });
+    await db.insert('products', {
+      'code': 'P002',
+      'name': 'HP Printer',
+      'category_id': 2,
+      'unit_id': 1,
+      'buy_price': 85000,
+      'sell_price': 110000,
+      'wholesale_price': 100000,
+    });
+    await db.insert('stock', {
+      'product_id': 1,
+      'warehouse_id': 1,
+      'quantity': 15,
+      'min_stock': 5,
+    });
+    await db.insert('stock', {
+      'product_id': 2,
+      'warehouse_id': 1,
+      'quantity': 3,
+      'min_stock': 5,
+    });
     await db.insert('settings', {'key': 'company_name', 'value': 'Yemen Trading Co'});
   }
 
