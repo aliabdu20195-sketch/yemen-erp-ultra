@@ -52,6 +52,7 @@ class YemenERPApp extends StatelessWidget {
               GlobalWidgetsLocalizations.delegate,
             ],
             home: const SplashScreen(),
+                              routes: {
               '/login': (context) => const LoginScreen(),
               '/dashboard': (context) => const DashboardScreen(),
             },
