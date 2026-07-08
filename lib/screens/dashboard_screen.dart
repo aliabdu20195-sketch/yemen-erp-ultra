@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/inventory_provider.dart';
 import 'add_product_screen.dart';
-
+import 'pos_screen.dart';
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -212,6 +212,7 @@ floatingActionButton: FloatingActionButton.extended(
                   title: const Text('لوحة التحكم'),
                   onTap: () => Navigator.pop(context),
                 ),
+                
                 const Divider(),
                 ListTile(
                   leading: const Icon(Icons.logout, color: Colors.red),
