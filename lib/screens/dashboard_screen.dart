@@ -32,6 +32,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text('Yemen ERP Ultra'),
       ),
+floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AddProductScreen()),
+          );
+          if (result == true) {
+            inventoryProvider.loadProducts();
+          }
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('إضافة منتج'),
+        backgroundColor: const Color(0xFF1a237e),
+      ),
       body: RefreshIndicator(
         onRefresh: () => inventoryProvider.loadProducts(),
         child: SingleChildScrollView(
