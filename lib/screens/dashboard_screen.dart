@@ -212,7 +212,20 @@ floatingActionButton: FloatingActionButton.extended(
                   title: const Text('لوحة التحكم'),
                   onTap: () => Navigator.pop(context),
                 ),
-                
+                ListTile(
+                  leading: const Icon(Icons.point_of_sale),
+                  title: const Text('نقطة البيع'),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const PosScreen()),
+                    );
+                    if (mounted) {
+                      Provider.of<InventoryProvider>(context, listen: false).loadProducts();
+                    }
+                  },
+                ),
                 const Divider(),
                 ListTile(
                   leading: const Icon(Icons.logout, color: Colors.red),
