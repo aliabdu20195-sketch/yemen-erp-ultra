@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
-import '../providers/inventory_provider.dart';
-import '../services/database_service.dart';
+import '../data/product_store.dart';
+import '../models/product.dart';
+import 'add_product_screen.dart';
+
+class CartItem {
+  final Product product;
+  int quantity;
+  CartItem({required this.product, this.quantity = 1});
+  double get subtotal => product.price * quantity;
+}
 
 class PosScreen extends StatefulWidget {
   const PosScreen({super.key});
@@ -12,212 +18,206 @@ class PosScreen extends StatefulWidget {
 }
 
 class _PosScreenState extends State<PosScreen> {
-  // productId -> {product: Map, quantity: int}
-  final Map<int, Map<String, dynamic>> _cart = {};
-  bool _isSaving = false;
+  final List<CartItem> _cart = [];
+  final TextEditingController _searchController = TextEditingController();
+  String _search = '';
 
-  double get _total {
-    double sum = 0;
-    _cart.forEach((id, item) {
-      final price = (item['product']['sell_price'] as num).toDouble();
-      final qty = item['quantity'] as int;
-      sum += price * qty;
-    });
-    return sum;
+  List<Product> get _filteredProducts {
+    final all = ProductStore.instance.products;
+    if (_search.trim().isEmpty) return all;
+    return all.where((p) => p.name.contains(_search.trim())).toList();
   }
 
-  void _addToCart(Map<String, dynamic> product) {
-    final id = product['id'] as int;
-    final availableQty = (product['stock_quantity'] ?? 0) as num;
+  double get _total => _cart.fold(0, (sum, item) => sum + item.subtotal);
 
+  void _addToCart(Product product) {
+    if (product.quantity <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الكمية غير متوفرة في المخزون')),
+      );
+      return;
+    }
     setState(() {
-      if (_cart.containsKey(id)) {
-        final currentQty = _cart[id]!['quantity'] as int;
-        if (currentQty + 1 > availableQty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('الكمية المتوفرة بالمخزون غير كافية')),
-          );
-          return;
+      final existing = _cart.indexWhere((c) => c.product.id == product.id);
+      if (existing != -1) {
+        if (_cart[existing].quantity < product.quantity) {
+          _cart[existing].quantity++;
         }
-        _cart[id]!['quantity'] = currentQty + 1;
       } else {
-        if (availableQty < 1) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('المنتج غير متوفر بالمخزون')),
-          );
-          return;
-        }
-        _cart[id] = {'product': product, 'quantity': 1};
+        _cart.add(CartItem(product: product));
       }
     });
   }
 
-  void _decreaseQty(int productId) {
+  void _removeFromCart(CartItem item) {
     setState(() {
-      final currentQty = _cart[productId]!['quantity'] as int;
-      if (currentQty <= 1) {
-        _cart.remove(productId);
-      } else {
-        _cart[productId]!['quantity'] = currentQty - 1;
+      _cart.remove(item);
+    });
+  }
+
+  void _changeQuantity(CartItem item, int delta) {
+    setState(() {
+      final newQty = item.quantity + delta;
+      if (newQty <= 0) {
+        _cart.remove(item);
+      } else if (newQty <= item.product.quantity) {
+        item.quantity = newQty;
       }
     });
   }
 
-  Future<void> _checkout() async {
+  void _checkout() {
     if (_cart.isEmpty) return;
 
-    setState(() => _isSaving = true);
-
-    try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final inventoryProvider = Provider.of<InventoryProvider>(context, listen: false);
-      final userId = authProvider.currentUser?['id'] as int?;
-
-      final invoiceNumber = 'INV-${DateTime.now().millisecondsSinceEpoch}';
-      final now = DateTime.now().toIso8601String();
-      final total = _total;
-
-      final invoiceId = await DatabaseService.instance.insert('sales_invoices', {
-        'invoice_number': invoiceNumber,
-        'user_id': userId,
-        'subtotal': total,
-        'discount_amount': 0,
-        'tax_amount': 0,
-        'total': total,
-        'paid': total,
-        'due': 0,
-        'invoice_date': now,
-        'status': 'completed',
-      });
-
-      for (final entry in _cart.entries) {
-        final product = entry.value['product'] as Map<String, dynamic>;
-        final qty = entry.value['quantity'] as int;
-        final price = (product['sell_price'] as num).toDouble();
-
-        await DatabaseService.instance.insert('sales_invoice_items', {
-          'invoice_id': invoiceId,
-          'product_id': product['id'],
-          'quantity': qty,
-          'unit_price': price,
-          'total': price * qty,
-        });
-
-        await DatabaseService.instance.rawExecute(
-          'UPDATE stock SET quantity = quantity - ? WHERE product_id = ? AND warehouse_id = 1',
-          [qty, product['id']],
-        );
-
-        await DatabaseService.instance.insert('stock_movements', {
-          'product_id': product['id'],
-          'warehouse_id': 1,
-          'movement_type': 'sale',
-          'quantity': -qty,
-          'notes': 'فاتورة $invoiceNumber',
-        });
-      }
-
-      await inventoryProvider.loadProducts();
-
-      if (mounted) {
-        setState(() => _cart.clear());
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تم حفظ الفاتورة $invoiceNumber بنجاح')),
-        );
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('حدث خطأ أثناء حفظ الفاتورة')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
+    for (final item in _cart) {
+      final newStock = item.product.quantity - item.quantity;
+      ProductStore.instance.updateQuantity(item.product.id, newStock);
     }
+
+    showDialog(
+      context: context,
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('تمت العملية بنجاح'),
+          content: Text('الإجمالي: ${_total.toStringAsFixed(2)}'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() => _cart.clear());
+              },
+              child: const Text('حسناً'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final inventoryProvider = Provider.of<InventoryProvider>(context);
-    final products = inventoryProvider.products;
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('نقطة البيع')),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: products.length,
-              itemBuilder: (context, index) {
-                final product = products[index];
-                final qty = (product['stock_quantity'] ?? 0) as num;
-                final inCart = _cart[product['id']]?['quantity'] ?? 0;
-
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text(product['name'] ?? ''),
-                    subtitle: Text('متوفر: $qty | ${product['sell_price']} ر.ي'),
-                    trailing: inCart > 0
-                        ? Row(
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('نقطة البيع'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add_box_outlined),
+              tooltip: 'إضافة منتج',
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AddProductScreen()),
+                );
+                setState(() {});
+              },
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: TextField(
+                controller: _searchController,
+                decoration: const InputDecoration(
+                  hintText: 'بحث عن منتج...',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (value) => setState(() => _search = value),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: GridView.builder(
+                padding: const EdgeInsets.all(8),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 2.4,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                ),
+                itemCount: _filteredProducts.length,
+                itemBuilder: (context, index) {
+                  final product = _filteredProducts[index];
+                  return Card(
+                    child: InkWell(
+                      onTap: () => _addToCart(product),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(product.name,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.right),
+                            const SizedBox(height: 4),
+                            Text('${product.price.toStringAsFixed(2)} - متوفر: ${product.quantity}',
+                                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              flex: 2,
+              child: _cart.isEmpty
+                  ? const Center(child: Text('السلة فارغة - اضغط على منتج للإضافة'))
+                  : ListView.builder(
+                      itemCount: _cart.length,
+                      itemBuilder: (context, index) {
+                        final item = _cart[index];
+                        return ListTile(
+                          title: Text(item.product.name),
+                          subtitle: Text('${item.product.price.toStringAsFixed(2)} × ${item.quantity} = ${item.subtotal.toStringAsFixed(2)}'),
+                          trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.remove_circle_outline),
-                                onPressed: () => _decreaseQty(product['id'] as int),
+                                onPressed: () => _changeQuantity(item, -1),
                               ),
-                              Text('$inCart', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Text('${item.quantity}'),
                               IconButton(
                                 icon: const Icon(Icons.add_circle_outline),
-                                onPressed: () => _addToCart(product),
+                                onPressed: () => _changeQuantity(item, 1),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                onPressed: () => _removeFromCart(item),
                               ),
                             ],
-                          )
-                        : IconButton(
-                            icon: const Icon(Icons.add_shopping_cart),
-                            onPressed: () => _addToCart(product),
                           ),
-                  ),
-                );
-              },
+                        );
+                      },
+                    ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8)],
-            ),
-            child: SafeArea(
-              top: false,
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: Text(
-                      'الإجمالي: ${_total.toStringAsFixed(0)} ر.ي',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  ElevatedButton(
-                    onPressed: (_cart.isEmpty || _isSaving) ? null : _checkout,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1a237e),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                    ),
-                    child: _isSaving
-                        ? const SizedBox(
-                            height: 20, width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('إتمام البيع', style: TextStyle(color: Colors.white)),
+                  Text('الإجمالي: ${_total.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ElevatedButton.icon(
+                    onPressed: _cart.isEmpty ? null : _checkout,
+                    icon: const Icon(Icons.point_of_sale),
+                    label: const Text('إتمام البيع'),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
