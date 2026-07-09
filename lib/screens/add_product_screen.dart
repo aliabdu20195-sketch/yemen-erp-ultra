@@ -160,7 +160,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<int>(
-                        initialValue: _selectedCategoryId,
+                        value: _selectedCategoryId,
                         decoration: const InputDecoration(
                           labelText: 'التصنيف',
                           border: OutlineInputBorder(),
@@ -174,8 +174,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         onChanged: (value) => setState(() => _selectedCategoryId = value),
                       ),
                       const SizedBox(height: 12),
-                      DropdownButtonFormField<int>(
-                        initialValue: _selectedUnitId,
+                      DropdownButtonFormField<int>( 
+                      value: _selectedUnitId,
                         decoration: const InputDecoration(
                           labelText: 'وحدة القياس',
                           border: OutlineInputBorder(),
